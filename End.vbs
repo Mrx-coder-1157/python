@@ -1,54 +1,52 @@
-' ============================
-' StopMiner.vbs - Cleanup Script (Final, Silent)
-' ============================
-Dim shell, fso, wmi, procs, proc
-Set shell = CreateObject("WScript.Shell")
-Set fso = CreateObject("Scripting.FileSystemObject")
-Set wmi = GetObject("winmgmts:\\.\root\cimv2")
-
-Dim appData, minerExe, minerDir, launcherPath, regPath, regName
-appData = shell.ExpandEnvironmentStrings("%APPDATA%")
-minerDir = appData & "\XMRigMiner"
-minerExe = "systemcache.exe"
-launcherPath = appData & "\WindowsUpdate\svchost.vbs"
-regPath = "HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
-regName = "WindowsUpdate"
-
+' ================================
+' EndMiner.vbs - Full XMRig Cleanup
+' ================================
 On Error Resume Next
 
-' === Kill miner process
-Set procs = wmi.ExecQuery("SELECT * FROM Win32_Process WHERE Name='" & minerExe & "'")
-For Each proc In procs
+Set shell = CreateObject("WScript.Shell")
+Set fso   = CreateObject("Scripting.FileSystemObject")
+Set wmi   = GetObject("winmgmts:\\.\root\cimv2")
+
+' === 1. Kill miner process
+Set minerProcs = wmi.ExecQuery("SELECT * FROM Win32_Process WHERE Name='systemcache.exe'")
+For Each proc In minerProcs
     proc.Terminate()
 Next
 
-WScript.Sleep 1000
-
-' === Kill any launcher scripts still running
-Dim allProcs, p
-Set allProcs = wmi.ExecQuery("SELECT * FROM Win32_Process WHERE Name='wscript.exe' OR Name='cscript.exe'")
-For Each p In allProcs
-    If InStr(LCase(p.CommandLine), "svchost.vbs") > 0 And InStr(LCase(p.CommandLine), "windowsupdate") > 0 Then
+' === 2. Kill watchdog VBS or PS1 processes
+Set scriptProcs = wmi.ExecQuery("SELECT * FROM Win32_Process WHERE Name='wscript.exe' OR Name='cscript.exe' OR Name='powershell.exe'")
+For Each p In scriptProcs
+    cmdline = LCase(p.CommandLine)
+    If InStr(cmdline, "windowsupdate") > 0 Or InStr(cmdline, "startmining.ps1") > 0 Or InStr(cmdline, "svchost.vbs") > 0 Then
         p.Terminate()
     End If
 Next
 
-WScript.Sleep 1000
+' === 3. Remove registry autorun key
+shell.RegDelete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run\WindowsUpdate"
 
-' === Remove startup registry
-shell.RegDelete regPath & "\" & regName
+' === 4. Delete scheduled task
+shell.Run "cmd /c schtasks /delete /tn ""WindowsUpdateSvc"" /f", 0, True
 
-' === Delete launcher file
-If fso.FileExists(launcherPath) Then
-    fso.DeleteFile launcherPath, True
-End If
+' === 5. Delete all folders and files
+paths = Array( _
+  shell.ExpandEnvironmentStrings("%APPDATA%") & "\XMRigMiner", _
+  shell.ExpandEnvironmentStrings("%APPDATA%") & "\WindowsUpdate", _
+  "C:\Users\Public\Libraries\svchost.vbs" _
+)
 
-' === Delete miner folder
-If fso.FolderExists(minerDir) Then
-    fso.DeleteFolder minerDir, True
-End If
+For Each path In paths
+    If fso.FileExists(path) Then
+        fso.DeleteFile path, True
+    ElseIf fso.FolderExists(path) Then
+        fso.DeleteFolder path, True
+    End If
+Next
 
-On Error GoTo 0
+' === 6. Extra forced removal using cmd (handles locked folders)
+For Each path In paths
+    shell.Run "cmd /c rmdir /s /q """ & path & """", 0, True
+Next
 
-' === Done
-MsgBox "Miner stopped and removed successfully.", vbInformation, "Done"
+' === 7. Done
+MsgBox "Miner fully removed.", vbInformation, "Cleanup Complete"
