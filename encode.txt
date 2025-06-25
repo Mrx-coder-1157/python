@@ -1,0 +1,5 @@
+$in = "$env:USERPROFILE\OneDrive\Desktop\zz\s.vbs"
+$out = "$env:USERPROFILE\OneDrive\Desktop\zz\s_encoded.vbs"
+$s = [IO.File]::ReadAllText($in)
+$e = ($s.ToCharArray() | ForEach-Object { 'Chr(' + [int][char]$_ + ')' }) -join ' & '
+Set-Content -Path $out -Value ("Execute " + $e)
